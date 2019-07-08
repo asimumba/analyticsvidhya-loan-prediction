@@ -1,0 +1,205 @@
+---
+title: "loan-prediction"
+author: "Aaron Simumba"
+date: "7/7/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(gridExtra) 
+library(mice)
+library(randomForest)
+library(rpart)
+library(Hmisc)
+loan_train <- read_csv("https://raw.githubusercontent.com/aasu14/Analytics-Vidhya-Loan-Prediction/master/train.csv")
+loan_test <- read_csv("https://raw.githubusercontent.com/aasu14/Analytics-Vidhya-Loan-Prediction/master/test.csv")
+```
+
+
+```{r}
+sum(is.na(loan_data))
+head(loan_data)
+names(loan_data)
+```
+
+## Data Cleaning 
+
+```{r}
+loan_data %>% 
+  select(ApplicantIncome, LoanAmount) %>% 
+  summary()
+glimpse(loan_data)
+```
+
+## Recorder the categorical variables
+
+```{r}
+loan_data <- loan_data %>% 
+  mutate(Dependents = if_else(Dependents == "3+","3",Dependents),
+         Loan_Status = if_else(Loan_Status == "Y","1","0"),
+         Education = if_else(Education == "Graduate","1","0"),
+         Self_Employed = if_else(Self_Employed == "Y","1","0"),
+         Married = if_else(Married == "Y","1","0"),
+         Gender = if_else(Gender == "Male","1","2"),
+         Property_Area = recode(Property_Area ,"Rural" = "1", "Urban" = "2", "Semiurban" = "3")
+         )
+```
+
+
+```{r}
+cols <- c("Gender", "Education", "Property_Area", "Loan_Status", "Self_Employed", "Dependents", "Married")
+
+loan_data <- loan_data %>% 
+  mutate_at(cols,funs(factor(.))) 
+
+loan_data <- loan_data %>% 
+  mutate_at(cols,funs(numeric(.))) 
+```
+
+```{r}
+library(naniar)
+gg_miss_var(loan_data)
+```
+
+```{r}
+loan_data %>% 
+  select(Loan_Status) %>% 
+  table()
+```
+
+## Multiple Imputation
+
+```{r}
+library(Amelia)
+
+train_imp <-  loan_data %>%
+  select(-Loan_ID) %>% 
+  amelia(m = 3)  
+names(train_imp$imputations) 
+loan_data <- train_imp$imputations$imp3
+```
+
+## Categorical variables to factors
+
+```{r}
+
+```
+
+
+```{r}
+loan_data %>% 
+  select(ApplicantIncome,Loan_Status) %>%
+  ggplot(aes(log10(ApplicantIncome))) +
+  geom_histogram(bins = 20)
+```
+
+
+```{r}
+loan_data %>% 
+  select(ApplicantIncome,Loan_Status) %>%
+  ggplot(aes(log10(ApplicantIncome))) +
+  geom_histogram(bins = 50) +
+  facet_wrap(~ Loan_Status)
+```
+
+```{r}
+loan_data %>% 
+  select(ApplicantIncome,Loan_Status) %>%
+  ggplot(aes(Loan_Status,ApplicantIncome)) +
+  geom_boxplot(fill= "gray") 
+```
+
+```{r}
+loan_data %>% 
+  select(ApplicantIncome,Gender, Loan_Status) %>%
+  ggplot(aes(Gender,ApplicantIncome)) +
+  geom_boxplot(fill= "gray") +
+  facet_wrap(~Loan_Status)
+  
+```
+
+```{r}
+ loan_data %>% 
+  select(CoapplicantIncome,Loan_Status) %>%
+  ggplot(aes(Loan_Status,CoapplicantIncome)) +
+  geom_boxplot(fill= "gray") +
+  theme_bw()
+```
+
+```{r}
+loan_data %>% 
+  select(Property_Area,Loan_Status) %>%
+  ggplot(aes(Property_Area)) +
+  geom_bar(fill= "gray", stat = "count") +
+  facet_wrap(~Loan_Status) +
+  theme_bw()
+```
+
+```{r}
+loan_data %>% 
+  select(Education,Loan_Status) %>%
+  ggplot(aes(Education)) +
+  geom_bar(fill= "gray", stat = "count") +
+  facet_wrap(~Loan_Status) +
+  theme_bw()
+```
+
+```{r}
+loan_data %>% 
+  select(Gender,Loan_Status) %>%
+  ggplot(aes(Gender)) +
+  geom_bar(fill= "gray", stat = "count") +
+  facet_wrap(~Loan_Status) +
+  theme_bw()
+```
+
+```{r}
+loan_data %>% 
+  select(Dependents,Loan_Status) %>%
+  ggplot(aes(Dependents)) +
+  geom_bar(fill= "gray", stat = "count") +
+  facet_wrap(~Loan_Status) +
+  theme_bw()
+```
+
+
+
+```{r}
+my_loan_data$LoanAmount[is.na(my_loan_data$LoanAmount)] <- median(my_loan_data$LoanAmount, na.rm=TRUE)
+  my_loan_data$Loan_Amount_Term[is.na(my_loan_data$Loan_Amount_Term)] <- median(my_loan_data$Loan_Amount_Term, na.rm=TRUE)
+  my_loan_data$Credit_History[is.na(my_loan_data$Credit_History)] <- median(my_loan_data$Credit_History, na.rm=TRUE)
+```
+
+
+```{r}
+  set.seed(123)
+  my_loan_data$spl = sample.split(my_loan_data$Loan_Status,SplitRatio=0.8)
+  my_loan_data_train <- subset(my_loan_data, spl == "TRUE")
+  nrow(my_loan_data_train)
+```
+
+
+```{r}
+num_variables <- c("applicant_income",
+                    "loan_amount",
+                   "population",
+                   "ffiecmedian_family_income",
+                   "number_of_owner_occupied_units",
+                   "number_of_1_to_4_family_units",
+                   "minority_population_pct",
+                   "tract_to_msa_md_income_pct"
+                   )
+
+mortgate_data_scaled <- train_main %>% 
+  select(num_variables) %>% 
+  preProcess(method = c("center", "scale"))
+
+test_main[,num_variables] = predict(mortgate_data_scaled, test_main [,num_variables])
+```
+
+
